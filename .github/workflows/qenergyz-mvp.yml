@@ -1,0 +1,225 @@
+name: Qenergyz MVP Workflow
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches:
+      - main
+      - setup-backend-core
+      - frontend-mobile
+      - ai-esg
+      - integrations-advanced
+      - testing-deployment
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+  CI: "true"
+
+jobs:
+  check-branch-sequence:
+    name: "Enforce PR Branch & Sequence"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR branch and base
+        run: |
+          allowed_pairs=(
+            "setup-backend-core:main"
+            "frontend-mobile:setup-backend-core"
+            "ai-esg:frontend-mobile"
+            "integrations-advanced:ai-esg"
+            "testing-deployment:integrations-advanced"
+          )
+          branch="${{ github.head_ref }}"
+          base="${{ github.base_ref }}"
+          pair="${branch}:${base}"
+          for allowed in "${allowed_pairs[@]}"; do
+            if [[ "$pair" == "$allowed" ]]; then
+              exit 0
+            fi
+          done
+          echo "❌ Invalid PR sequence: $pair"
+          exit 1
+
+  backend-lint-test:
+    name: "Backend: Lint, Format, Test"
+    runs-on: ubuntu-latest
+    if: contains(github.head_ref, 'backend') || contains(github.head_ref, 'ai-esg') || contains(github.head_ref, 'integrations-advanced') || contains(github.head_ref, 'testing-deployment')
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Lint (flake8)
+        run: flake8 src tests
+      - name: Format check (black)
+        run: black --check src tests
+      - name: Security scan (safety)
+        run: safety check || true
+      - name: Run tests (pytest)
+        run: pytest --cov=src --cov-report=xml
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+
+  frontend-lint-test:
+    name: "Frontend: Lint, Test"
+    runs-on: ubuntu-latest
+    if: contains(github.head_ref, 'frontend') || contains(github.head_ref, 'testing-deployment')
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint (ESLint)
+        run: npm run lint
+      - name: Run tests (Jest)
+        run: npm run test -- --coverage
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/lcov.info
+
+  mobile-lint-test:
+    name: "Mobile: Lint, Test"
+    runs-on: ubuntu-latest
+    if: contains(github.head_ref, 'mobile') || contains(github.head_ref, 'testing-deployment')
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint (ESLint)
+        run: npm run lint
+      - name: Run tests (Jest)
+        run: npm run test -- --coverage
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-coverage
+          path: mobile/coverage/lcov.info
+
+  e2e-tests:
+    name: "E2E: Cypress/Playwright"
+    runs-on: ubuntu-latest
+    if: contains(github.head_ref, 'frontend') || contains(github.head_ref, 'mobile') || contains(github.head_ref, 'testing-deployment')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies (frontend)
+        run: |
+          cd frontend
+          npm ci
+      - name: Run E2E tests (Cypress)
+        run: |
+          cd frontend
+          npm run e2e || true
+
+  codeql-security:
+    name: "Security: CodeQL Analysis"
+    runs-on: ubuntu-latest
+    if: contains(github.head_ref, 'backend') || contains(github.head_ref, 'ai-esg') || contains(github.head_ref, 'integrations-advanced') || contains(github.head_ref, 'testing-deployment')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python, javascript
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  review-feedback:
+    name: "Automated Code Review Comments"
+    runs-on: ubuntu-latest
+    needs: [backend-lint-test, frontend-lint-test, mobile-lint-test, codeql-security]
+    steps:
+      - name: Post review comment
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: |
+            ## 🤖 Automated Code Review
+            - All lint, test, and security jobs must pass for merge.
+            - Please ensure 80%+ coverage and address all security warnings.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  auto-approve:
+    name: "Auto-Approve PR"
+    runs-on: ubuntu-latest
+    needs: review-feedback
+    if: ${{ github.event_name == 'pull_request' && github.actor == 'dependabot[bot]' }}
+    steps:
+      - name: Approve PR
+        uses: hmarr/auto-approve-action@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  auto-merge:
+    name: "Auto-Merge PR"
+    runs-on: ubuntu-latest
+    needs: [review-feedback, auto-approve]
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == false &&
+      github.event.pull_request.state == 'open' &&
+      github.actor == 'dependabot[bot]'
+    steps:
+      - name: Merge PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            if (pr && pr.state === "open") {
+              await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                merge_method: "squash"
+              });
+            }
+
+  deploy:
+    name: "Deploy & Backup (Final Stage)"
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/testing-deployment'
+    needs: [backend-lint-test, frontend-lint-test, mobile-lint-test, e2e-tests, codeql-security, review-feedback]
+    steps:
+      - name: Deploy backend (Railway/Render)
+        run: echo "Deploy backend here (Railway/Render/AWS Lambda/Docker Swarm/etc.)"
+      - name: Deploy frontend (Vercel)
+        run: echo "Deploy frontend here (Vercel config)"
+      - name: Verify and backup DB/files
+        run: echo "Backup/restore scripts here"
+      - name: Notify stakeholders
+        run: echo "Send Slack/Teams/Email/Investor update, etc."

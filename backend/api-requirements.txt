@@ -1,0 +1,57 @@
+# Core FastAPI and async dependencies
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+pydantic[email]==2.11.7
+python-multipart==0.0.20
+
+# Database
+asyncpg==0.30.0
+sqlalchemy[asyncio]==2.0.42
+alembic==1.16.4
+aiosqlite==0.21.0
+
+# Authentication and Security  
+pyjwt[crypto]==2.9.0
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.5.0
+argon2-cffi==25.1.0
+cryptography>=41.0.0
+
+# Rate limiting and caching
+slowapi==0.1.9
+redis==6.4.0
+
+# Input validation and sanitization
+bleach==6.2.0
+email-validator==2.2.0
+
+# Logging and monitoring
+structlog==25.4.0
+sentry-sdk[fastapi]==2.34.1
+
+# Configuration
+python-dotenv==1.1.1
+pydantic-settings==2.10.1
+
+# HTTP client for external APIs
+httpx==0.28.1
+
+# Testing
+pytest==8.4.1
+pytest-asyncio==1.1.0
+pytest-cov==6.2.1
+
+# Development dependencies
+black==23.12.1
+flake8==7.1.1
+isort==5.13.2
+mypy==1.13.0
+
+# Security scanning
+bandit==1.7.8
+safety==3.2.10
+
+# Additional utilities
+tenacity==9.1.2
+python-dateutil==2.9.0
+pytz==2024.2

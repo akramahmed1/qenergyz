@@ -12,7 +12,9 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - ENVIRONMENT=development
-      - DEBUG=true
+      - API_VERSION=v2
+      - SECRET_KEY=dev-secret-key-change-in-production-123456789
+      - ENCRYPTION_KEY=dev-encryption-key-change-in-production-987654321
     depends_on:
       postgres:
         condition: service_healthy

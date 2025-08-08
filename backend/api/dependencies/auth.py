@@ -90,12 +90,19 @@ class PasswordHandler:
     def verify_password(password: str, hashed_password: str) -> bool:
         """Verify password against hash, try Argon2 first then bcrypt"""
         try:
-            # Try Argon2 first
-            argon2_hasher.verify(hashed_password, password)
-            return True
-        except VerifyMismatchError:
-            # Fall back to bcrypt
-            return pwd_context.verify(password, hashed_password)
+            # Try Argon2 first (check if it starts with $argon2)
+            if hashed_password.startswith("$argon2"):
+                argon2_hasher.verify(hashed_password, password)
+                return True
+            else:
+                # Fall back to bcrypt
+                return pwd_context.verify(password, hashed_password)
+        except (VerifyMismatchError, Exception):
+            # Try bcrypt if Argon2 fails
+            try:
+                return pwd_context.verify(password, hashed_password)
+            except Exception:
+                return False
     
     @staticmethod
     def needs_rehash(hashed_password: str) -> bool:

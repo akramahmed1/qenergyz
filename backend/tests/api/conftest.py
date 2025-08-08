@@ -72,7 +72,10 @@ def test_settings():
         encryption_key="test-encryption-key",
         redis_url="redis://localhost:6379/1",
         environment="testing",
-        debug=True
+        debug=True,
+        # Disable rate limiting for tests
+        rate_limit_per_minute=1000,
+        rate_limit_per_hour=10000
     )
 
 

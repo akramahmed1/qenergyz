@@ -1,0 +1,362 @@
+version: '3.8'
+
+# Qenergyz Docker Swarm Stack Configuration
+# Deploy with: docker stack deploy -c docker-stack.yml qenergyz
+#
+# Prerequisites:
+# - Docker Swarm initialized: docker swarm init
+# - Docker secrets created (see deployment documentation)
+# - Persistent volumes configured for production data
+
+networks:
+  qenergyz-overlay:
+    driver: overlay
+    attachable: true
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
+
+volumes:
+  postgres-data:
+    driver: local
+  timescale-data:
+    driver: local
+  redis-data:
+    driver: local
+  kafka-data:
+    driver: local
+  influxdb-data:
+    driver: local
+  grafana-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  minio-data:
+    driver: local
+  elasticsearch-data:
+    driver: local
+
+# Docker secrets for production (create these before deployment)
+# docker secret create qenergyz_db_password /path/to/db_password.txt
+# docker secret create qenergyz_secret_key /path/to/secret_key.txt
+# docker secret create qenergyz_encryption_key /path/to/encryption_key.txt
+
+services:
+  # FastAPI Backend with load balancing
+  qenergyz-backend:
+    image: qenergyz/backend:${BACKEND_VERSION:-latest}
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      placement:
+        constraints:
+          - node.role == worker
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    environment:
+      - DB_URL=postgresql://qenergyz:qenergyz123@postgres:5432/qenergyz
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - ENVIRONMENT=production
+      - API_VERSION=v2
+    secrets:
+      - qenergyz_secret_key
+      - qenergyz_encryption_key
+    networks:
+      - qenergyz-overlay
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+
+  # PostgreSQL Database (single instance with backup)
+  postgres:
+    image: postgres:15-alpine
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+          - node.hostname == db-primary
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    environment:
+      - POSTGRES_DB=qenergyz
+      - POSTGRES_USER=qenergyz
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    secrets:
+      - source: qenergyz_db_password
+        target: /run/secrets/postgres_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - qenergyz-overlay
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qenergyz -d qenergyz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis Cache with persistence
+  redis:
+    image: redis:7-alpine
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == worker
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    volumes:
+      - redis-data:/data
+    networks:
+      - qenergyz-overlay
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Apache Kafka (single node for demo)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == worker
+      restart_policy:
+        condition: on-failure
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - qenergyz-overlay
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == worker
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - qenergyz-overlay
+    depends_on:
+      - zookeeper
+
+  # React Frontend
+  qenergyz-frontend:
+    image: qenergyz/frontend:${FRONTEND_VERSION:-latest}
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      update_config:
+        parallelism: 1
+        delay: 10s
+      placement:
+        constraints:
+          - node.role == worker
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - qenergyz-overlay
+    depends_on:
+      - qenergyz-backend
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:1.25-alpine
+    deploy:
+      replicas: 2
+      placement:
+        constraints:
+          - node.role == worker
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    ports:
+      - "80:80"
+      - "443:443"
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/nginx.conf
+    networks:
+      - qenergyz-overlay
+    depends_on:
+      - qenergyz-backend
+      - qenergyz-frontend
+
+  # Monitoring Services
+  grafana:
+    image: grafana/grafana:10.2.0
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - qenergyz-overlay
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus-data:/prometheus
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    networks:
+      - qenergyz-overlay
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+
+  # Background Processing
+  celery-worker:
+    image: qenergyz/backend:${BACKEND_VERSION:-latest}
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      placement:
+        constraints:
+          - node.role == worker
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    command: celery -A src.worker worker --loglevel=info
+    environment:
+      - DB_URL=postgresql://qenergyz:qenergyz123@postgres:5432/qenergyz
+      - REDIS_URL=redis://redis:6379/0
+    secrets:
+      - qenergyz_secret_key
+      - qenergyz_encryption_key
+    networks:
+      - qenergyz-overlay
+    depends_on:
+      - postgres
+      - redis
+
+  celery-beat:
+    image: qenergyz/backend:${BACKEND_VERSION:-latest}
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.role == manager
+    command: celery -A src.worker beat --loglevel=info
+    environment:
+      - DB_URL=postgresql://qenergyz:qenergyz123@postgres:5432/qenergyz
+      - REDIS_URL=redis://redis:6379/0
+    secrets:
+      - qenergyz_secret_key
+      - qenergyz_encryption_key
+    networks:
+      - qenergyz-overlay
+    depends_on:
+      - postgres
+      - redis
+
+# External configs (create these before deployment)
+# docker config create nginx_config /path/to/nginx.conf
+# docker config create prometheus_config /path/to/prometheus.yml
+configs:
+  nginx_config:
+    external: true
+  prometheus_config:
+    external: true
+
+# External secrets (create these before deployment)
+secrets:
+  qenergyz_db_password:
+    external: true
+  qenergyz_secret_key:
+    external: true
+  qenergyz_encryption_key:
+    external: true

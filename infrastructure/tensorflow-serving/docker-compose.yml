@@ -1,0 +1,100 @@
+version: '3.8'
+
+# TensorFlow Serving Configuration for Qenergyz ML Models
+# 
+# This Docker Compose file sets up TensorFlow Serving with model management
+# and monitoring capabilities for production ML model deployment.
+
+services:
+  # TensorFlow Serving - Main Model Server
+  tensorflow-serving:
+    image: tensorflow/serving:2.13.0
+    container_name: qenergyz-tf-serving
+    ports:
+      - "8501:8501"  # REST API
+      - "8500:8500"  # gRPC API
+    environment:
+      - MODEL_CONFIG_FILE=/models/models.config
+      - MODEL_CONFIG_FILE_POLL_WAIT_SECONDS=60
+      - MONITORING_CONFIG_FILE=/models/monitoring.config
+      - ENABLE_BATCHING=true
+      - BATCHING_PARAMETERS_FILE=/models/batching.config
+    volumes:
+      - ./models:/models
+      - ./configs:/configs
+    networks:
+      - qenergyz-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+  # Model Repository Manager
+  model-manager:
+    build: ./model-manager
+    container_name: qenergyz-model-manager
+    ports:
+      - "8502:8502"
+    environment:
+      - TF_SERVING_URL=http://tensorflow-serving:8501
+      - MODEL_STORAGE_PATH=/models
+      - POSTGRES_URL=postgresql://qenergyz:qenergyz123@postgres:5432/qenergyz
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./models:/models
+      - ./model-artifacts:/model-artifacts
+    networks:
+      - qenergyz-network
+    depends_on:
+      - tensorflow-serving
+    restart: unless-stopped
+
+  # Model Monitoring Dashboard
+  model-monitor:
+    image: grafana/grafana:10.2.0
+    container_name: qenergyz-model-monitor
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - model-monitor-data:/var/lib/grafana
+      - ./grafana-dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana-datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - qenergyz-network
+    restart: unless-stopped
+
+  # Prometheus for TF Serving Metrics
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: qenergyz-model-prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-model-data:/prometheus
+    networks:
+      - qenergyz-network
+    restart: unless-stopped
+
+networks:
+  qenergyz-network:
+    external: true
+
+volumes:
+  model-monitor-data:
+    driver: local
+  prometheus-model-data:
+    driver: local

@@ -1,0 +1,56 @@
+timeouts:
+  startup: 30
+  api_response: 5
+  health_check: 10
+  database_connection: 15
+
+endpoints:
+  health: "/health"
+  ready: "/ready" 
+  metrics: "/metrics"
+  status: "/status"
+
+critical_services:
+  - name: "database"
+    type: "postgresql"
+    health_check: "SELECT 1"
+    timeout: 10
+  - name: "redis"
+    type: "redis"
+    health_check: "PING"
+    timeout: 5
+  - name: "trading_service"
+    type: "internal"
+    health_check: "/internal/health"
+    timeout: 10
+  - name: "risk_service"
+    type: "internal"
+    health_check: "/internal/health"
+    timeout: 10
+
+thresholds:
+  response_time_ms: 200
+  memory_usage_mb: 512
+  cpu_usage_percent: 80
+  error_rate_percent: 1
+
+external_dependencies:
+  - name: "market_data_api"
+    url: "https://api.example.com/health"
+    timeout: 15
+    required: false
+  - name: "compliance_service"
+    url: "https://compliance.example.com/status"
+    timeout: 10
+    required: true
+
+monitoring:
+  metrics_collection: true
+  health_check_interval: 30
+  alert_on_failure: true
+  max_consecutive_failures: 3
+
+test_data:
+  sample_symbols: ["WTI", "BRENT", "NATGAS"]
+  test_user_id: "smoke-test-user"
+  test_portfolio_id: "smoke-test-portfolio"

@@ -1,0 +1,60 @@
+{
+  "metadata": {
+    "generated_at": "2025-08-08 10:32:50",
+    "report_directory": "reports/test_run_demo",
+    "generator_version": "1.0.0"
+  },
+  "summary": {
+    "total_categories": 1,
+    "total_tests": 3,
+    "passed_tests": 3,
+    "failed_tests": 0,
+    "error_tests": 0,
+    "skipped_tests": 0,
+    "total_execution_time": 0.043,
+    "overall_success_rate": 100.0,
+    "categories_passed": 1,
+    "categories_failed": 0
+  },
+  "categories": {
+    "1_smoke": {
+      "name": "1_smoke",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "time": 0.043,
+      "success_rate": 100.0,
+      "test_cases": [
+        {
+          "name": "test_environment_setup",
+          "classname": "tests.1_smoke.test_smoke_basic",
+          "time": 0.001,
+          "status": "passed"
+        },
+        {
+          "name": "test_system_resources",
+          "classname": "tests.1_smoke.test_smoke_basic",
+          "time": 0.001,
+          "status": "passed"
+        },
+        {
+          "name": "test_mock_application_startup",
+          "classname": "tests.1_smoke.test_smoke_basic",
+          "time": 0.01,
+          "status": "passed"
+        }
+      ]
+    }
+  },
+  "logs": {
+    "10_security": {
+      "file": "10_security.log",
+      "size": 63,
+      "lines": 1,
+      "errors": 1,
+      "warnings": 1,
+      "content": "Sample security test log with 3 ERRORS and 2 WARNINGS for demo\n"
+    }
+  }
+}

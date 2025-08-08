@@ -1,0 +1,158 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      rollback_target:
+        description: 'Rollback target (revision number or "previous")'
+        required: true
+        default: 'previous'
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get current deployment info
+        id: current-deployment
+        run: |
+          current_task_def=$(aws ecs describe-services \
+            --cluster qenergyz-${{ github.event.inputs.environment }} \
+            --services qenergyz-backend \
+            --query 'services[0].taskDefinition' \
+            --output text)
+          
+          echo "current_task_def=$current_task_def" >> $GITHUB_OUTPUT
+          
+          # Get revision number
+          current_revision=$(echo $current_task_def | grep -o '[0-9]*$')
+          echo "current_revision=$current_revision" >> $GITHUB_OUTPUT
+
+      - name: Determine rollback target
+        id: rollback-target
+        run: |
+          if [ "${{ github.event.inputs.rollback_target }}" = "previous" ]; then
+            target_revision=$(({{ steps.current-deployment.outputs.current_revision }} - 1))
+          else
+            target_revision=${{ github.event.inputs.rollback_target }}
+          fi
+          
+          target_task_def="qenergyz-backend:$target_revision"
+          echo "target_task_def=$target_task_def" >> $GITHUB_OUTPUT
+          echo "target_revision=$target_revision" >> $GITHUB_OUTPUT
+
+      - name: Validate rollback target
+        run: |
+          # Check if target task definition exists
+          aws ecs describe-task-definition \
+            --task-definition ${{ steps.rollback-target.outputs.target_task_def }} \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text
+
+      - name: Create rollback confirmation
+        run: |
+          echo "🔄 ROLLBACK CONFIRMATION"
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Current Revision: ${{ steps.current-deployment.outputs.current_revision }}"
+          echo "Target Revision: ${{ steps.rollback-target.outputs.target_revision }}"
+          echo "Current Task Def: ${{ steps.current-deployment.outputs.current_task_def }}"
+          echo "Target Task Def: ${{ steps.rollback-target.outputs.target_task_def }}"
+
+      - name: Perform database rollback (if needed)
+        run: |
+          echo "Checking if database rollback is needed..."
+          
+          # For major version changes, manual intervention might be required
+          # This is a placeholder for database rollback logic
+          echo "Database rollback requires manual review for this deployment."
+
+      - name: Rollback application
+        run: |
+          echo "Starting rollback of backend service..."
+          
+          # Update ECS service to use previous task definition
+          aws ecs update-service \
+            --cluster qenergyz-${{ github.event.inputs.environment }} \
+            --service qenergyz-backend \
+            --task-definition ${{ steps.rollback-target.outputs.target_task_def }}
+          
+          # Wait for rollback to complete
+          aws ecs wait services-stable \
+            --cluster qenergyz-${{ github.event.inputs.environment }} \
+            --services qenergyz-backend
+
+      - name: Verify rollback
+        run: |
+          # Check service status
+          service_status=$(aws ecs describe-services \
+            --cluster qenergyz-${{ github.event.inputs.environment }} \
+            --services qenergyz-backend \
+            --query 'services[0].deployments[0].status' \
+            --output text)
+          
+          echo "Service status: $service_status"
+          
+          # Perform health check
+          timeout=300
+          interval=30
+          elapsed=0
+          
+          while [ $elapsed -lt $timeout ]; do
+            if curl -f "https://api-${{ github.event.inputs.environment }}.qenergyz.com/health"; then
+              echo "✅ Health check passed - rollback successful!"
+              exit 0
+            fi
+            sleep $interval
+            elapsed=$((elapsed + interval))
+            echo "Waiting for health check... ($elapsed/$timeout seconds)"
+          done
+          
+          echo "❌ Health check failed after rollback"
+          exit 1
+
+      - name: Update monitoring
+        if: success()
+        run: |
+          # Send custom metric to CloudWatch
+          aws cloudwatch put-metric-data \
+            --namespace "Qenergyz/Deployment" \
+            --metric-data \
+            MetricName=RollbackCompleted,Value=1,Unit=Count,Dimensions=Environment=${{ github.event.inputs.environment }}
+
+      - name: Notify team
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          username: 'GitHub Actions'
+          text: |
+            🔄 Rollback completed for ${{ github.event.inputs.environment }}
+            Status: ${{ job.status }}
+            From Revision: ${{ steps.current-deployment.outputs.current_revision }}
+            To Revision: ${{ steps.rollback-target.outputs.target_revision }}
+            Initiated by: ${{ github.actor }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

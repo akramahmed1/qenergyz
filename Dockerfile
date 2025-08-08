@@ -28,7 +28,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Copy application code
 COPY backend/src /app/src
+COPY backend/api /app/api
 COPY backend/tests /app/tests
+COPY backend/alembic /app/alembic
+COPY backend/alembic.ini /app/alembic.ini
 COPY .env.example /app/.env
 
 # Create non-root user for security

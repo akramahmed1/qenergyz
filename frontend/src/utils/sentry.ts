@@ -1,5 +1,4 @@
 import * as Sentry from '@sentry/react'
-import { BrowserTracing } from '@sentry/tracing'
 
 export function initializeSentry() {
   const dsn = import.meta.env.VITE_SENTRY_DSN
@@ -14,7 +13,7 @@ export function initializeSentry() {
     dsn,
     environment,
     integrations: [
-      new BrowserTracing(),
+      Sentry.browserTracingIntegration(),
     ],
     
     // Performance monitoring
@@ -47,9 +46,6 @@ export function initializeSentry() {
     // Configure what data to send
     sendDefaultPii: false,
     attachStacktrace: true,
-    
-    // Transport options
-    transport: Sentry.makeBrowserTransport,
     
     // Additional options
     maxBreadcrumbs: 50,

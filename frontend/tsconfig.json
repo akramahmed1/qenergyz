@@ -61,16 +61,18 @@
     "src/**/*.tsx",
     "src/**/*.d.ts",
     "tests/**/*.ts",
-    "tests/**/*.tsx",
-    "vite.config.ts"
+    "tests/**/*.tsx"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "build",
     "coverage",
-    "**/*.spec.ts",
-    "**/*.test.ts"
+    "src/test/**/*",
+    "src/**/*.test.*",
+    "src/**/*.spec.*",
+    "**/*.test.ts",
+    "**/*.spec.ts"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

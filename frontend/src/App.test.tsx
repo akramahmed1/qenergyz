@@ -2,7 +2,7 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from 'react-query'
-import App from '../App'
+import App from './App'
 
 // Mock i18next
 jest.mock('react-i18next', () => ({

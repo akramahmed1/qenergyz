@@ -18,36 +18,19 @@ export const resources = {
 } as const
 
 export function initializeI18n() {
-  i18n
-    // Load translation using http backend
+  return i18n
     .use(Backend)
-    // Detect user language
     .use(LanguageDetector)
-    // Pass the i18n instance to react-i18next
     .use(initReactI18next)
-    // Initialize i18next
     .init({
-      // Default language
       lng: import.meta.env.VITE_DEFAULT_LANGUAGE || 'en',
-      
-      // Fallback language
       fallbackLng: 'en',
-      
-      // Supported languages
       supportedLngs: ['en', 'ar'],
-      
-      // Debug mode
       debug: import.meta.env.DEV,
-      
-      // Namespace
       defaultNS,
-      
-      // Resources
       resources,
       
-      // Language detection
       detection: {
-        // Order of detection methods
         order: [
           'localStorage',
           'sessionStorage', 
@@ -56,35 +39,22 @@ export function initializeI18n() {
           'path',
           'subdomain'
         ],
-        
-        // Keys to lookup language from
         lookupLocalStorage: 'i18nextLng',
         lookupSessionStorage: 'i18nextLng',
-        
-        // Cache user language
         caches: ['localStorage'],
-        
-        // Only detect on initialize
         checkWhitelist: true,
       },
 
-      // Backend configuration
       backend: {
-        // Path to load resources from
         loadPath: '/locales/{{lng}}/{{ns}}.json',
-        
-        // Allow cross domain requests
         crossDomain: false,
-        
-        // Request timeout
         requestOptions: {
           cache: 'default',
         },
       },
 
-      // Interpolation
       interpolation: {
-        escapeValue: false, // React already does escaping
+        escapeValue: false,
         formatSeparator: ',',
         format: function(value, format, lng) {
           if (format === 'uppercase') return value.toUpperCase()
@@ -115,36 +85,20 @@ export function initializeI18n() {
         }
       },
 
-      // React options
       react: {
-        // Bind i18n instance
         bindI18n: 'languageChanged',
         bindI18nStore: '',
-        
-        // Use Suspense
         useSuspense: true,
-        
-        // Wait for translation to be loaded
         wait: true,
       },
 
-      // Pluralization
       pluralSeparator: '_',
       contextSeparator: '_',
-
-      // Clean code on production
       cleanCode: true,
-      
-      // Return empty string for missing keys in production
       returnEmptyString: !import.meta.env.DEV,
-      
-      // Return key if missing in development
       returnNull: false,
-      
-      // Callbacks
       initImmediate: false,
       
-      // Parsing
       parseMissingKeyHandler: (key: string) => {
         if (import.meta.env.DEV) {
           console.warn(`Missing translation key: ${key}`)
@@ -152,16 +106,15 @@ export function initializeI18n() {
         return key
       },
       
-      // Missing key handler
-      missingKeyHandler: (lng, ns, key, fallbackValue) => {
+      missingKeyHandler: (lng, ns, key) => {
         if (import.meta.env.DEV) {
           console.warn(`Missing key "${key}" in language "${lng}" and namespace "${ns}"`)
         }
       },
       
-      // Postprocessor to handle RTL languages
       postProcess: ['rtl'],
     })
+}
 
   // Handle RTL languages
   i18n.on('languageChanged', (lng) => {

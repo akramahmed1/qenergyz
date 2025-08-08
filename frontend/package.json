@@ -16,8 +16,7 @@
     "type-check": "tsc --noEmit",
     "format": "prettier --write src/**/*.{ts,tsx,json,css,md}",
     "format:check": "prettier --check src/**/*.{ts,tsx,json,css,md}",
-    "analyze": "npm run build && npx vite-bundle-analyzer dist/stats.html",
-    "prepare": "husky install"
+    "analyze": "npm run build && npx vite-bundle-analyzer dist/stats.html"
   },
   "dependencies": {
     "react": "^18.2.0",

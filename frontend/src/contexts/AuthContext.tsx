@@ -44,10 +44,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(false)
   }, [])
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, _password: string) => {
     setIsLoading(true)
     try {
       // Mock login - in real app this would call the API
+      // TODO: Replace with actual API call using email and password
       const mockUser: User = {
         id: '1',
         email,

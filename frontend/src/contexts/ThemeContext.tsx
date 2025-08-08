@@ -45,6 +45,9 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
       mediaQuery.addEventListener('change', updateResolvedTheme)
       return () => mediaQuery.removeEventListener('change', updateResolvedTheme)
     }
+    
+    // Return undefined explicitly when no cleanup is needed
+    return undefined
   }, [theme])
 
   useEffect(() => {

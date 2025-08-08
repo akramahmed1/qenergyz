@@ -12,7 +12,11 @@ import gettext
 from enum import Enum
 from typing import Dict, Any, Optional, List
 from functools import lru_cache
-from pydantic import BaseSettings, Field, validator
+try:
+    from pydantic_settings import BaseSettings
+    from pydantic import Field, validator
+except ImportError:
+    from pydantic import BaseSettings, Field, validator
 import structlog
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -270,7 +274,18 @@ class ConfigurationSingleton:
     
     def _setup_logging(self):
         """Configure structured logging with region-specific settings"""
-        log_level = getattr(structlog.stdlib.INFO, self._settings.log_level.value, structlog.stdlib.INFO)
+        import logging
+        
+        # Convert string log level to actual logging level
+        log_level_mapping = {
+            'DEBUG': logging.DEBUG,
+            'INFO': logging.INFO,
+            'WARNING': logging.WARNING,
+            'ERROR': logging.ERROR,
+            'CRITICAL': logging.CRITICAL
+        }
+        
+        log_level = log_level_mapping.get(self._settings.log_level.value, logging.INFO)
         
         # Configure structlog for JSON logging
         structlog.configure(

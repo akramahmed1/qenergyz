@@ -71,6 +71,28 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
     jwt_expiration_hours: int = Field(default=24, env="JWT_EXPIRATION_HOURS")
     
+    # OAuth/SSO Configuration
+    google_oauth_client_id: Optional[str] = Field(None, env="GOOGLE_OAUTH_CLIENT_ID")
+    google_oauth_client_secret: Optional[str] = Field(None, env="GOOGLE_OAUTH_CLIENT_SECRET")
+    microsoft_oauth_client_id: Optional[str] = Field(None, env="MICROSOFT_OAUTH_CLIENT_ID")
+    microsoft_oauth_client_secret: Optional[str] = Field(None, env="MICROSOFT_OAUTH_CLIENT_SECRET")
+    microsoft_oauth_tenant: Optional[str] = Field(None, env="MICROSOFT_OAUTH_TENANT")
+    github_oauth_client_id: Optional[str] = Field(None, env="GITHUB_OAUTH_CLIENT_ID")
+    github_oauth_client_secret: Optional[str] = Field(None, env="GITHUB_OAUTH_CLIENT_SECRET")
+    linkedin_oauth_client_id: Optional[str] = Field(None, env="LINKEDIN_OAUTH_CLIENT_ID")
+    linkedin_oauth_client_secret: Optional[str] = Field(None, env="LINKEDIN_OAUTH_CLIENT_SECRET")
+    
+    # BFF/Gateway Configuration
+    base_url: str = Field(default="http://localhost:8000", env="BASE_URL")
+    enable_response_caching: bool = Field(default=True, env="ENABLE_RESPONSE_CACHING")
+    response_cache_ttl: int = Field(default=300, env="RESPONSE_CACHE_TTL")  # 5 minutes
+    
+    # CORS Configuration
+    cors_allow_origins: List[str] = Field(default=["*"], env="CORS_ALLOW_ORIGINS")
+    cors_allow_credentials: bool = Field(default=True, env="CORS_ALLOW_CREDENTIALS")
+    cors_allow_methods: List[str] = Field(default=["*"], env="CORS_ALLOW_METHODS")
+    cors_allow_headers: List[str] = Field(default=["*"], env="CORS_ALLOW_HEADERS")
+    
     # Database Configuration
     database_url: str = Field(..., env="DB_URL")
     test_database_url: Optional[str] = Field(None, env="TEST_DATABASE_URL")

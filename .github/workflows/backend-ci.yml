@@ -360,7 +360,242 @@ jobs:
         if: always()
         run: docker-compose down
 
-  compliance-tests:
+  e2e-tests:
+    name: "🌐 End-to-End Tests"
+    runs-on: ubuntu-latest
+    needs: [security-scan]
+    defaults:
+      run:
+        working-directory: backend
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: qenergyz_test
+          POSTGRES_USER: qenergyz
+          POSTGRES_PASSWORD: qenergyz123
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-asyncio pytest-mock
+
+      - name: Set up test environment
+        env:
+          SECRET_KEY: "test-secret-key-for-ci-only-123456789"
+          ENCRYPTION_KEY: "test-encryption-key-for-ci-123456789"
+          DB_URL: "postgresql://qenergyz:qenergyz123@localhost:5432/qenergyz_test"
+          REDIS_URL: "redis://localhost:6379/0"
+          ENVIRONMENT: "testing"
+          DEBUG: "false"
+          MOCK_MODE: "true"
+          GOOGLE_OAUTH_CLIENT_ID: "test-google-client-id"
+          GOOGLE_OAUTH_CLIENT_SECRET: "test-google-client-secret"
+          MICROSOFT_OAUTH_CLIENT_ID: "test-microsoft-client-id"
+          MICROSOFT_OAUTH_CLIENT_SECRET: "test-microsoft-client-secret"
+        run: |
+          echo "Setting up E2E test environment"
+          
+      - name: Run E2E Tests
+        env:
+          SECRET_KEY: "test-secret-key-for-ci-only-123456789"
+          ENCRYPTION_KEY: "test-encryption-key-for-ci-123456789"
+          DB_URL: "postgresql://qenergyz:qenergyz123@localhost:5432/qenergyz_test"
+          REDIS_URL: "redis://localhost:6379/0"
+          ENVIRONMENT: "testing"
+          DEBUG: "false"
+          MOCK_MODE: "true"
+        run: |
+          python -m pytest tests/e2e/test_bff_e2e.py \
+            -v \
+            --maxfail=3 \
+            --timeout=300 \
+            --durations=10 \
+            --tb=short \
+            --junitxml=e2e-test-results.xml
+
+      - name: Upload E2E test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: e2e-test-results
+          path: backend/e2e-test-results.xml
+
+  bff-integration-tests:
+    name: "🔗 BFF Gateway Integration Tests"
+    runs-on: ubuntu-latest
+    needs: [unit-tests]
+    defaults:
+      run:
+        working-directory: backend
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: qenergyz_test
+          POSTGRES_USER: qenergyz
+          POSTGRES_PASSWORD: qenergyz123
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Test BFF Gateway Services
+        env:
+          SECRET_KEY: "test-secret-key-for-ci-only-123456789"
+          ENCRYPTION_KEY: "test-encryption-key-for-ci-123456789"
+          DB_URL: "postgresql://qenergyz:qenergyz123@localhost:5432/qenergyz_test"
+          REDIS_URL: "redis://localhost:6379/0"
+          ENVIRONMENT: "testing"
+        run: |
+          python -m pytest tests/integration/ -k "bff" \
+            -v \
+            --maxfail=3 \
+            --timeout=120 \
+            --cov=src/gateway \
+            --cov-report=xml:bff-coverage.xml \
+            --cov-report=term-missing \
+            --junitxml=bff-integration-results.xml
+
+      - name: Upload BFF test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: bff-integration-results
+          path: |
+            backend/bff-integration-results.xml
+            backend/bff-coverage.xml
+
+  security-enhanced-scan:
+    name: "🔒 Enhanced Security Scanning"
+    runs-on: ubuntu-latest
+    needs: [lint-and-format]
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install security tools
+        run: |
+          pip install --upgrade pip
+          pip install safety bandit semgrep
+          pip install -r requirements.txt
+
+      - name: Run enhanced Bandit security scan
+        run: |
+          bandit -r src/ \
+            -f json \
+            -o bandit-report.json \
+            --exclude tests/ \
+            --skip B101,B601 || true
+
+      - name: Run Safety vulnerability check
+        run: |
+          safety check \
+            --json \
+            --output safety-report.json || true
+
+      - name: Run Semgrep security analysis
+        run: |
+          semgrep --config=auto \
+            --json \
+            --output=semgrep-report.json \
+            src/ || true
+
+      - name: Check OAuth/SSO security configuration
+        run: |
+          echo "Checking OAuth/SSO security configuration..."
+          python -c "
+          import os
+          import sys
+          
+          # Check for hardcoded secrets
+          dangerous_patterns = ['client_secret', 'private_key', 'secret_key']
+          
+          for root, dirs, files in os.walk('src/'):
+              for file in files:
+                  if file.endswith('.py'):
+                      filepath = os.path.join(root, file)
+                      with open(filepath, 'r') as f:
+                          content = f.read()
+                          for pattern in dangerous_patterns:
+                              if pattern in content.lower() and '=' in content:
+                                  print(f'WARNING: Potential hardcoded secret in {filepath}')
+          
+          print('OAuth/SSO security check completed')
+          "
+
+      - name: Upload security scan results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: enhanced-security-reports
+          path: |
+            backend/bandit-report.json
+            backend/safety-report.json
+            backend/semgrep-report.json
     name: "⚖️ Compliance & Regulatory Tests"
     runs-on: ubuntu-latest
     needs: [unit-tests]

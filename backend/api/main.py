@@ -22,7 +22,7 @@ import structlog
 from .dependencies.auth import get_current_user
 from .dependencies.database import get_db
 from .dependencies.rate_limiting import limiter
-from .routes import auth, users, trading, onboarding, compliance, risk
+from .routes import auth, users, trading, onboarding, compliance, risk, bff
 from .utils.exceptions import setup_exception_handlers
 from .utils.middleware import setup_middleware
 from .utils.logging import setup_logging
@@ -88,6 +88,7 @@ def create_app() -> FastAPI:
     app.include_router(onboarding.router, prefix="/api/v1/onboarding", tags=["Onboarding"])
     app.include_router(compliance.router, prefix="/api/v1/compliance", tags=["Compliance"])
     app.include_router(risk.router, prefix="/api/v1/risk", tags=["Risk Management"])
+    app.include_router(bff.router, tags=["BFF Gateway"])  # BFF routes with built-in prefix
     
     # Health check endpoints
     @app.get("/health", tags=["Health"])

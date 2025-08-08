@@ -27,6 +27,8 @@ from .services.trading import TradingService
 from .services.risk import RiskService  
 from .services.compliance import ComplianceService
 from .services.iot import IoTService
+from .gateway.security_middleware import SecurityMiddleware, SecurityConfig
+from .gateway.audit_logger import AuditLogger
 
 # Structured logging setup
 logger = structlog.get_logger(__name__)
@@ -152,14 +154,18 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Configure based on environment
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Security middleware (must be first)
+security_config = SecurityConfig()
+app.add_middleware(SecurityMiddleware, config=security_config)
+
+# CORS middleware - now handled by SecurityMiddleware
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],  # Configure based on environment
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
 # Security middleware
 app.add_middleware(

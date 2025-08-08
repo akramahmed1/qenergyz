@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../hooks/useTheme'
+import { VoiceControl } from '../VoiceControl'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -54,6 +55,11 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               ))}
             </ul>
           </nav>
+
+          {/* Voice Control */}
+          <div className="p-4 border-t border-border">
+            <VoiceControl className="mb-4" />
+          </div>
 
           {/* User Info */}
           <div className="p-4 border-t border-border">

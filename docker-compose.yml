@@ -284,6 +284,32 @@ services:
       - qenergyz-network
     restart: unless-stopped
 
+  # React Frontend
+  qenergyz-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: qenergyz-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_WS_URL=ws://localhost:8000/ws
+      - VITE_REGION=middle_east
+      - VITE_DEFAULT_LANGUAGE=en
+      - VITE_DEBUG_MODE=true
+      - VITE_MOCK_API=false
+    depends_on:
+      - qenergyz-backend
+    networks:
+      - qenergyz-network
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - /app/node_modules
+    restart: unless-stopped
+
   # Nginx Reverse Proxy
   nginx:
     image: nginx:1.25-alpine
@@ -296,6 +322,7 @@ services:
       - ./config/ssl:/etc/nginx/ssl
     depends_on:
       - qenergyz-backend
+      - qenergyz-frontend
     networks:
       - qenergyz-network
     restart: unless-stopped
